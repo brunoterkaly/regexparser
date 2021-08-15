@@ -1,0 +1,8 @@
+venv/
+mvenv/
+*/__pycache__/*
+config/src/secrets.py
+*.un~
+*.pyc
+*__pycache__*
+secrets.py
