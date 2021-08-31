@@ -23,6 +23,8 @@ from subprocess import Popen, PIPE, STDOUT
 <meta-char> ::= '?' | '*' | '+'
 """
 
+mystack = None
+
 # ===============================================================
 # https://deniskyashif.com/2020/08/17/parsing-regex-with-recursive-descent/
 # ===============================================================
@@ -31,7 +33,7 @@ class MyStack:
         self.container = (
             []
         )  # You don't want to assign [] to self - when you do that, you're just assigning to a new local variable called `self`.  You want your stack to *have* a list, not *be* a list.
-
+        mystack = self.container
     def isEmpty(self):
         return (
             self.size() == 0
@@ -172,6 +174,7 @@ class TreeNode:
             print(ex)
 
     def atom2(self):
+        # Push
         atom = RegExNode("atom")
         self._stack.push(atom)
         if self.peek() == "(":
@@ -183,6 +186,9 @@ class TreeNode:
                 "Atom", [TreeNode("lparen", "("), expression, TreeNode("rparen", ")")]
             )
         ch = self.char2()
+        # Connect and pop before leaving
+        self.connect_stack()
+        self._stack.pop()
 
     def char2(self):
         if self.isMetaChar(self.peek()):
@@ -197,6 +203,10 @@ class TreeNode:
         char = RegExNode("Char")
         self._stack.push(char)
         self._stack.push(literal)
+        # Connect and pop before leaving
+        self.connect_stack()
+        self._stack.pop()
+        pass
 
     # ===========================================================
     # Old Grammar Functions
