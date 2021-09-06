@@ -7,6 +7,7 @@ import re
 import os
 
 from subprocess import Popen, PIPE, STDOUT
+from typing_extensions import Literal
 
 """
 
@@ -34,6 +35,7 @@ class MyStack:
             []
         )  # You don't want to assign [] to self - when you do that, you're just assigning to a new local variable called `self`.  You want your stack to *have* a list, not *be* a list.
         mystack = self.container
+
     def isEmpty(self):
         return (
             self.size() == 0
@@ -67,7 +69,8 @@ class MyStack:
         return len(self.container)  # length of the container
 
     def show(self):
-        return self.container  # display the entire stack as list
+        for s in reversed(self.container):
+            print(s._label)
 
 
 class RegExNode:
@@ -109,34 +112,6 @@ class TreeNode:
         self.match(ch)
         return ch
 
-    # ===========================================================
-    # New Grammar Functions
-    # ===========================================================
-    def toParseTree2(self, regex, regex_node):
-        self._pattern = regex
-        self._pos = 0
-        self._stack.push(regex_node)
-        return self.expr2()
-
-    def expr2(self):
-        # Call down the chain pushing
-
-        while not self._stack.isEmpty():
-            self.term2()
-            if self.hasMoreChars() and self.peek() == "|":
-                self.match("|")
-                # Recurse
-                regex_node = RegExNode("expr", [])
-                self._stack.push(regex_node)
-                expression = self.expr()
-
-    def term2(self):
-        term = RegExNode("term")
-        self._stack.push(term)
-        factor = self.factor2()
-        if self.hasMoreChars() and self.peek() != "|":
-            # Recurse 1
-            self.term2()
     def connect_stack(self):
         topoffset = len(self._stack.container) - 1
         topnode = self._stack.container[topoffset]
@@ -147,46 +122,79 @@ class TreeNode:
         trgnode = copytrgnode
         trgnode._children.append(copytopnode)
         self._stack.container[trgoffset] = trgnode
-        
+
+    # ===========================================================
+    # New Grammar Functions
+    # ===========================================================
+    def toParseTree2(self, regex, regex_node):
+        self._pattern = regex
+        self._pos = 0
+        #self._stack.push(regex_node)
+        self.expr2()
+        #self.connect_stack()
+        #self._stack.pop()
+
+    def expr2(self):
+        # Call down the chain pushing
+        expr = RegExNode("expr")
+        self._stack.push(expr)
+
+        self.term2()
+        if self.hasMoreChars() and self.peek() == "|":
+            self.match("|")
+            # Recurse
+            regex_node = RegExNode("expr", [])
+            self._stack.push(regex_node)
+            expression = self.expr()
+        self.connect_stack()
+        self._stack.pop()
+
+    def term2(self):
+        term = RegExNode("term")
+        self._stack.push(term)
+        factor = self.factor2()
+        if self.hasMoreChars() and self.peek() != "|":
+            # Recurse 1
+            self.term2()
+
+        self.connect_stack()
+        self._stack.pop()
+
 
     def factor2(self):
         factor = RegExNode("factor")
         self._stack.push(factor)
         atom = self.atom2()
-        # before looking for meta, let's process stack
-        # pop until 'factor'
+        if self.hasMoreChars() and self.isMetaChar(self.peek()):
+            atom = self.factor2()()
 
-        try:
-            while True:
-
-                self.connect_stack()
-                
-                currtop = self._stack.pop()
-                
-                if currtop._label == "factor":
-                    self._stack.push(currtop)
-                    exit
-
-            if self.hasMoreChars() and self.isMetaChar(self.peek()):
-                meta = self.next()
-                return TreeNode("Factor", [atom, TreeNode(meta, None)])
-        except Exception as ex:
-            print(ex)
+        self.connect_stack()  # pop 'atom' off stack
+        self._stack.pop()
 
     def atom2(self):
         # Push
-        atom = RegExNode("atom")
-        self._stack.push(atom)
-        if self.peek() == "(":
-            self.match("(")
-            # Recurse 3
-            expression = self.expr()
-            self.match(")")
-            return TreeNode(
-                "Atom", [TreeNode("lparen", "("), expression, TreeNode("rparen", ")")]
-            )
-        ch = self.char2()
-        # Connect and pop before leaving
+        if self.peek().isalnum():
+            atom = RegExNode("atom")
+            self._stack.push(atom)
+            ch = self.char2()
+            self.connect_stack()
+            self._stack.pop()
+
+        # About to return but first add meta and add to parent from here
+        # When I return, atom should NOT be on stack
+
+        if self.isMetaChar(self.peek()):
+            atom = RegExNode("atom")
+            self._stack.push(atom)
+            ch = self.meta2()
+            self.connect_stack()
+            self._stack.pop()
+
+    def meta2(self):
+
+        meta = RegExNode("Meta")
+        self._stack.push(meta)
+        literal = self.literal()
         self.connect_stack()
         self._stack.pop()
 
@@ -195,19 +203,21 @@ class TreeNode:
             raise ("Unexpected symbol = ".format(self.peek()))
         if self.peek() == "\\":
             self.match("\\")
-            return TreeNode(
-                "Char", [TreeNode("slash", "\\"), TreeNode("next", self.next())]
-            )
+            pass
 
-        literal = RegExNode(self.next(), None)
         char = RegExNode("Char")
         self._stack.push(char)
-        self._stack.push(literal)
-        # Connect and pop before leaving
+        literal = self.literal()
         self.connect_stack()
         self._stack.pop()
         pass
 
+    def literal(self):
+        literal = RegExNode(self.next(), None)
+        self._stack.push(literal)
+        # Connect and pop before leaving
+        self.connect_stack()
+        self._stack.pop()
     # ===========================================================
     # Old Grammar Functions
     # ===========================================================
@@ -271,10 +281,11 @@ if __name__ == "__main__":
     expr = "ab*|ac"
     expr = "a+b?"
 
+    # tree_node2 = TreeNode("Begin", [])
+    # final_tree = tree_node2.toParseTree(expr)
+
     tree_node = TreeNode("Begin", [])
     regex_node = RegExNode("expr", [])
     final_tree2 = tree_node.toParseTree2(expr, regex_node)
     print(final_tree2)
     # Old code
-    tree_node2 = TreeNode("Begin", [])
-    final_tree = tree_node2.toParseTree(expr)
