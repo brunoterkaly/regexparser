@@ -129,10 +129,10 @@ class TreeNode:
     def toParseTree2(self, regex, regex_node):
         self._pattern = regex
         self._pos = 0
-        #self._stack.push(regex_node)
+        # self._stack.push(regex_node)
         self.expr2()
-        #self.connect_stack()
-        #self._stack.pop()
+        # self.connect_stack()
+        # self._stack.pop()
 
     def expr2(self):
         # Call down the chain pushing
@@ -142,10 +142,7 @@ class TreeNode:
         self.term2()
         if self.hasMoreChars() and self.peek() == "|":
             self.match("|")
-            # Recurse
-            regex_node = RegExNode("expr", [])
-            self._stack.push(regex_node)
-            expression = self.expr()
+            expression = self.expr2()
         self.connect_stack()
         self._stack.pop()
 
@@ -159,7 +156,6 @@ class TreeNode:
 
         self.connect_stack()
         self._stack.pop()
-
 
     def factor2(self):
         factor = RegExNode("factor")
@@ -187,6 +183,16 @@ class TreeNode:
             atom = RegExNode("atom")
             self._stack.push(atom)
             ch = self.meta2()
+            self.connect_stack()
+            self._stack.pop()
+
+        if self.peek() == "(":
+            atom = RegExNode("atom")
+            self._stack.push(atom)
+            self.match("(")
+            # Recurse 3
+            expression = self.expr2()
+            self.match(")")
             self.connect_stack()
             self._stack.pop()
 
@@ -218,6 +224,7 @@ class TreeNode:
         # Connect and pop before leaving
         self.connect_stack()
         self._stack.pop()
+
     # ===========================================================
     # Old Grammar Functions
     # ===========================================================
@@ -278,8 +285,8 @@ class TreeNode:
 
 
 if __name__ == "__main__":
-    expr = "ab*|ac"
     expr = "a+b?"
+    expr = "(a|b)*c"
 
     # tree_node2 = TreeNode("Begin", [])
     # final_tree = tree_node2.toParseTree(expr)
