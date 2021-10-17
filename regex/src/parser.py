@@ -12,15 +12,15 @@ from typing_extensions import Literal
 """
 
 <expr> ::= <term>
-    | <term>'|'<expr>
+	| <term>'|'<expr>
 <term> ::= <factor>
-    | <factor><term>
+	| <factor><term>
 <factor> ::= <atom>
-    | <atom><meta-char>
+	| <atom><meta-char>
 <atom> ::= <char>
-    | '('<expr>')'
+	| '('<expr>')'
 <char> ::= <any-char-except-meta>
-    | '\'<any-char>
+	| '\'<any-char>
 <meta-char> ::= '?' | '*' | '+'
 """
 
@@ -31,15 +31,19 @@ mystack = None
 # ===============================================================
 class MyStack:
     def __init__(self):
-        self.container = (
-            []
-        )  # You don't want to assign [] to self - when you do that, you're just assigning to a new local variable called `self`.  You want your stack to *have* a list, not *be* a list.
+        self.container = []
         mystack = self.container
 
     def isEmpty(self):
-        return (
-            self.size() == 0
-        )  # While there's nothing wrong with self.container == [], there is a builtin function for that purpose, so we may as well use it.  And while we're at it, it's often nice to use your own internal functions, so behavior is more consistent.
+        return self.size() == 0
+
+    def isExpr(self):
+        stack_len = len(self.container)
+        return self.container[stack_len - 1]._label == "expr"
+
+    def isAtom(self):
+        stack_len = len(self.container)
+        return self.container[stack_len - 1]._label == "atom"
 
     def push(self, item):
         self.container.append(
@@ -123,28 +127,133 @@ class TreeNode:
         trgnode._children.append(copytopnode)
         self._stack.container[trgoffset] = trgnode
 
-    # ===========================================================
     # New Grammar Functions
     # ===========================================================
     def toParseTree2(self, regex, regex_node):
         self._pattern = regex
         self._pos = 0
         # self._stack.push(regex_node)
+        self.expr4()
+        self.expr3()
         self.expr2()
         # self.connect_stack()
         # self._stack.pop()
 
+    """
+	<expr> ::= <term>
+		| <term>'|'<expr>
+	"""
+
+    def connect_children(self, number_children):
+        for i in range(0, number_children):
+            self.connect_stack()
+            self._stack.pop()
+
+    def push1(self):
+        node = RegExNode("expr")
+        self._stack.push(node)
+
+    def push4(self):
+        node = RegExNode("expr")
+        self._stack.push(node)
+        node = RegExNode("term")
+        self._stack.push(node)
+        node = RegExNode("factor")
+        self._stack.push(node)
+        node = RegExNode("atom")
+        self._stack.push(node)
+
+    def expr4(self):
+        # The code reflects teh grammar
+        try:
+            while True:
+                while self.hasMoreChars():
+                    if self.peek() == "(":
+                        node = RegExNode("expr")
+                        self._stack.push(node)
+                        node = RegExNode("term")
+                        self._stack.push(node)
+                        node = RegExNode("factor")
+                        self._stack.push(node)
+                        node = RegExNode("atom")
+                        self._stack.push(node)
+                        literal = RegExNode(self.next(), None)
+                        self._stack.push(literal)
+                        self.connect_children(1)
+                        while self.hasMoreChars():
+                            if self.peek().isalnum():
+                                node = RegExNode("expr")
+                                self._stack.push(node)
+                                node = RegExNode("term")
+                                self._stack.push(node)
+                                node = RegExNode("factor")
+                                self._stack.push(node)
+                                node = RegExNode("atom")
+                                literal = RegExNode(self.next(), None)
+                                self._stack.push(literal)
+                                self.connect_children(3)
+                            if self.peek() == "|":
+                                literal = RegExNode(self.next(), None)
+                                self._stack.push(literal)
+                                self.connect_children(1)
+                            if self.peek() == ")":
+                                self.connect_children(1)
+                                break
+
+        except Exception as ex:
+            pass
+
+    def expr3(self):
+        # The code reflects teh grammar
+        try:
+            while self.hasMoreChars():
+                # if lparen, then expr -> char
+                if self.peek() == "(":
+                    node = RegExNode("expr")
+                    self._stack.push(node)
+                    node = RegExNode("term")
+                    self._stack.push(node)
+                    node = RegExNode("factor")
+                    self._stack.push(node)
+                    node = RegExNode("atom")
+                    self._stack.push(node)
+                    ch = self.lparen()  # autoconnect
+                    # At this level I can expect expr or )
+
+                if self.peek() == ")":
+                    self.connect_children(1)
+                    ch = self.rparen()  # autoconnect
+                    self.connect_children(1)
+                    continue
+                # if alnum, then expr -> char
+                if self.peek().isalnum():
+                    self.push4()
+                    ch = self.char2()
+                    self.connect_children(3)
+                    continue
+                # if |, then add to expr
+                if self.peek() == "|":
+                    # self.push1()
+                    self.pipe()
+                    self.connect_children(1)
+                    continue
+
+        except Exception as ex:
+            pass
+
     def expr2(self):
-        # Call down the chain pushing
+        # The code reflects teh grammar
         expr = RegExNode("expr")
         self._stack.push(expr)
 
+        # expressions need atleast one term. a term is
         self.term2()
         if self.hasMoreChars() and self.peek() == "|":
-            self.match("|")
+            self.pipe()
             expression = self.expr2()
         self.connect_stack()
         self._stack.pop()
+        pass
 
     def term2(self):
         term = RegExNode("term")
@@ -156,16 +265,18 @@ class TreeNode:
 
         self.connect_stack()
         self._stack.pop()
+        pass
 
     def factor2(self):
         factor = RegExNode("factor")
         self._stack.push(factor)
         atom = self.atom2()
         if self.hasMoreChars() and self.isMetaChar(self.peek()):
-            atom = self.factor2()()
+            atom = self.factor2()
 
         self.connect_stack()  # pop 'atom' off stack
         self._stack.pop()
+        pass
 
     def atom2(self):
         # Push
@@ -175,6 +286,7 @@ class TreeNode:
             ch = self.char2()
             self.connect_stack()
             self._stack.pop()
+            return
 
         # About to return but first add meta and add to parent from here
         # When I return, atom should NOT be on stack
@@ -185,16 +297,40 @@ class TreeNode:
             ch = self.meta2()
             self.connect_stack()
             self._stack.pop()
+            return
 
         if self.peek() == "(":
             atom = RegExNode("atom")
             self._stack.push(atom)
-            self.match("(")
-            # Recurse 3
+            ch = self.lparen()
             expression = self.expr2()
-            self.match(")")
             self.connect_stack()
             self._stack.pop()
+            return
+
+        if self.peek() == ")":
+            atom = RegExNode("atom")
+            self._stack.push(atom)
+            ch = self.rparen()
+            self.connect_stack()
+            self._stack.pop()
+            return
+
+        if self.peek() == "|":
+            atom = RegExNode("atom")
+            self._stack.push(atom)
+            ch = self.pipe()
+            self.connect_stack()
+            self._stack.pop()
+            return
+
+    def pipe(self):
+
+        literal = RegExNode(self.next(), None)
+        self._stack.push(literal)
+        self.connect_stack()
+        self._stack.pop()
+        pass
 
     def meta2(self):
 
@@ -203,6 +339,22 @@ class TreeNode:
         literal = self.literal()
         self.connect_stack()
         self._stack.pop()
+        pass
+
+    def lparen(self):
+
+        literal = RegExNode(self.next(), None)
+        self._stack.push(literal)
+        self.connect_stack()
+        self._stack.pop()
+        pass
+
+    def rparen(self):
+        literal = RegExNode(self.next(), None)
+        self._stack.push(literal)
+        self.connect_stack()
+        self._stack.pop()
+        pass
 
     def char2(self):
         if self.isMetaChar(self.peek()):
@@ -224,6 +376,7 @@ class TreeNode:
         # Connect and pop before leaving
         self.connect_stack()
         self._stack.pop()
+        pass
 
     # ===========================================================
     # Old Grammar Functions
@@ -296,3 +449,44 @@ if __name__ == "__main__":
     final_tree2 = tree_node.toParseTree2(expr, regex_node)
     print(final_tree2)
     # Old code
+
+"""
+				if self.hasMoreChars() and self.peek() == "|":
+					literal = RegExNode(self.next(), None)
+					self._stack.push(literal)
+					self.connect_stack()
+					self._stack.pop()
+				term = RegExNode("term")
+				self._stack.push(term)
+				if self.hasMoreChars() and self.peek() != "|":
+					factor = RegExNode("factor")
+					self._stack.push(factor)
+					if self.peek() == "(":
+						atom = RegExNode("atom")
+						self._stack.push(atom)
+						ch = self.lparen()
+						continue
+					if self.peek() == ")":
+						literal = RegExNode(self.next(), None)
+						self._stack.push(literal)
+						self.connect_stack()
+						self._stack.pop()
+						break
+					if self.peek().isalnum():
+						atom = RegExNode("atom")
+						self._stack.push(atom)
+						char = RegExNode("Char")
+						self._stack.push(char)
+						literal = RegExNode(self.next(), None)
+						self._stack.push(literal)
+						# Pop back 2 atoms
+						while not self._stack.isAtom():
+							self.connect_stack()
+							self._stack.pop()
+						self.connect_stack()
+						self._stack.pop()
+						while not self._stack.isAtom():
+							self.connect_stack()
+							self._stack.pop()
+							#break
+							"""
